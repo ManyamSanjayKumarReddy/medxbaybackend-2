@@ -121,15 +121,13 @@ router.get('/doctors', async (req, res) => {
         sortCriteria = {};
     }
 
-    // Fetch doctors with populated hospitals from time slots
     const doctors = await Doctor.find({ verified: 'Verified' })
       .populate({
         path: 'hospitals',
-        select: 'name city -_id' // Include only name and city fields
+        select: 'name city -_id' 
       })
       .sort(sortCriteria);
 
-    // Prepare other dropdown options and data needed for rendering
     const countries = await Doctor.distinct('country');
     const states = await Doctor.distinct('state');
     const cities = await Doctor.distinct('city');
@@ -155,16 +153,26 @@ router.get('/doctors', async (req, res) => {
 
 router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id);
-    if (!doctor) {
-      return res.status(404).send('Doctor not found');
-    }
-    res.render('doctorProfileView', { doctor });
+      const doctorId = req.params.id;
+      const doctor = await Doctor.findById(doctorId)
+          .populate({
+              path: 'reviews.patientId',
+              select: 'name'
+          });
+      if (!doctor) {
+          return res.status(404).send('Doctor not found');
+      }
+
+      const blogs = await Blog.find({ authorId: doctorId, verificationStatus: 'Verified' });
+
+      res.render('doctorProfileView', { doctor, blogs });
   } catch (error) {
-    console.error(error.message);
-    res.status(500).send('Server Error');
+      console.error(error.message);
+      res.status(500).send('Server Error');
   }
 });
+
+
 
 router.post('/book', isLoggedIn, async (req, res) => {
   try {
@@ -215,6 +223,48 @@ router.get('/bookings', isLoggedIn, async (req, res) => {
   try {
     const bookings = await Booking.find({ patient: req.session.user._id }).populate('doctor');
     res.render('patientBookings', { bookings });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+router.get('/review/:doctorId/:bookingId', isLoggedIn, async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.doctorId);
+    const booking = await Booking.findById(req.params.bookingId);
+
+    if (!doctor || !booking) {
+      return res.status(404).send('Doctor or booking not found');
+    }
+
+    res.render('reviewForm', { doctor, booking });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+router.post('/review/:doctorId/:bookingId', isLoggedIn, async (req, res) => {
+  try {
+    const { rating, reviewText } = req.body;
+
+    const doctor = await Doctor.findById(req.params.doctorId);
+    const booking = await Booking.findById(req.params.bookingId);
+
+    if (!doctor || !booking) {
+      return res.status(404).send('Doctor or booking not found');
+    }
+
+    doctor.reviews.push({
+      patientId: req.session.user._id,
+      rating,
+      reviewText
+    });
+
+    await doctor.save();
+
+    res.redirect('/patient/bookings'); 
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server Error');
@@ -437,15 +487,12 @@ router.get('/dashboard', isLoggedIn, async (req, res) => {
           return res.status(404).send('Patient not found');
       }
 
-      // Fetch chats and include doctorId
       const chats = await Chat.find({ patientId: patient._id })
           .populate('doctorId', 'name')
           .sort({ updatedAt: -1 })
-          .lean(); // Use lean() to get plain JavaScript objects
+          .lean();
 
-      // Calculate unread message counts for each chat
       chats.forEach(chat => {
-          // Count unread messages where the sender is a doctor
           chat.unreadCount = chat.messages.filter(message => 
               !message.read && message.senderId.toString() !== patient._id.toString()
           ).length;
@@ -468,7 +515,6 @@ router.get('/chat/:id', isLoggedIn, async (req, res) => {
       return res.status(404).send('Chat not found');
     }
 
-    // Update only received messages (senderId != logged-in user's ID)
     const updatedChat = await Chat.findById(chatId);
 
     if (updatedChat) {
@@ -541,6 +587,15 @@ router.get('/prescriptions', isLoggedIn, async (req, res) => {
 });
 
 
+const fontPaths = {
+  regular: path.join(__dirname, '../fonts/Matter-Regular.ttf'),
+  bold: path.join(__dirname, '../fonts/Matter-Bold.ttf'),
+  italic: path.join(__dirname, '../fonts/Matter-RegularItalic.ttf'),
+  boldItalic: path.join(__dirname, '../fonts/Matter-BoldItalic.ttf'),
+  semiBold: path.join(__dirname, '../fonts/Matter-SemiBold.ttf'),
+  medium: path.join(__dirname, '../fonts/Matter-Medium.ttf')
+};
+
 router.get('/prescriptions/:id/download', isLoggedIn, async (req, res) => {
   try {
     const prescription = await Prescription.findById(req.params.id)
@@ -552,7 +607,6 @@ router.get('/prescriptions/:id/download', isLoggedIn, async (req, res) => {
     }
 
     const doctor = prescription.doctorId;
-
     const booking = await Booking.findOne({
       patient: prescription.patientId,
       doctor: prescription.doctorId
@@ -563,7 +617,6 @@ router.get('/prescriptions/:id/download', isLoggedIn, async (req, res) => {
     }
 
     const hospital = booking.hospital;
-
     const doc = new PDFDocument({ margin: 40 });
     const fileName = `prescription-${prescription._id}.pdf`;
     const prescriptionsDir = path.join(__dirname, '../public/prescriptions');
@@ -574,77 +627,92 @@ router.get('/prescriptions/:id/download', isLoggedIn, async (req, res) => {
 
     const filePath = path.join(prescriptionsDir, fileName);
 
+    doc.registerFont('Matter-Regular', fontPaths.regular);
+    doc.registerFont('Matter-Bold', fontPaths.bold);
+    doc.registerFont('Matter-Italic', fontPaths.italic);
+    doc.registerFont('Matter-BoldItalic', fontPaths.boldItalic);
+    doc.registerFont('Matter-SemiBold', fontPaths.semiBold);
+    doc.registerFont('Matter-Medium', fontPaths.medium);
+
     doc.info.Title = 'E-Prescription';
     doc.info.Author = 'MedxBay';
 
-    const logoX = 40;
-    const titleX = 45;
-    const doctorInfoX = 400;
-    const headerY = 40;
+    const backgroundColor = '#F4F7FC';
+    const textColor = '#272848';
+    const lineColor = '#b0baca'; 
 
-    const watermarkX = (doc.page.width - 195) / 2; 
-    const watermarkY = (doc.page.height - 195) / 2; 
+    const addHeaderFooter = () => {
+      doc.rect(0, 0, doc.page.width, doc.page.height).fill(backgroundColor);
 
-    doc
-      .opacity(0.15) 
-      .image('x.png', watermarkX, watermarkY, { width: 200, height: 200 }) 
-      .opacity(1); 
+      const logoX = 40;
+      const titleX = 45;
+      const doctorInfoX = 400;
+      const headerY = 40;
+      const watermarkX = (doc.page.width - 225) / 2;
+      const watermarkY = (doc.page.height - 115) / 2;
 
-    doc
-      .image('logo.png', logoX, headerY, { width: 115 })
-      .font('Times-Bold') 
-      .fontSize(18)
-      .text('E-Prescription', titleX, headerY, { align: 'center' })
-      .fontSize(10)
-      .font('Times-Roman') 
-      .text('MedxBay', titleX, headerY + 19, { align: 'center' })
-      .font('Times-Italic')
-      .fontSize(10)
-      .text('Your Trusted Health Partner', titleX, headerY + 31, { align: 'center' })
+      doc.opacity(0.08).image('logo.png', watermarkX, watermarkY, { width: 220 }).opacity(1);
+
+      doc.image('logo.png', logoX, headerY, { width: 115 })
+        .font('Matter-Medium')
+        .fontSize(18)
+        .fillColor(textColor)
+        .text('E-Prescription', titleX, headerY, { align: 'center' })
+        .fontSize(10)
+        .font('Matter-Regular')
+        .text('MedxBay', titleX, headerY + 19, { align: 'center' })
+        .font('Matter-Italic')
+        .fontSize(10)
+        .text('Your Trusted Health Partner', titleX, headerY + 31, { align: 'center' })
+        .moveDown(1.5);
+
+      doc.font('Matter-SemiBold').fontSize(12).fillColor(textColor)
+        .text(` ${doctor.name}`, doctorInfoX, headerY, { align: 'right' })
+        .font('Matter-Regular')
+        .text(`${doctor.speciality.join(', ')}`, doctorInfoX, headerY + 15, { align: 'right' })
+        .font('Matter-Italic')
+        .text(`${prescription.doctorEmail}`, doctorInfoX, headerY + 30, { align: 'right' })
+        .moveDown(2);
+
+        doc.fillColor(lineColor).moveTo(40, headerY + 60).lineTo(570, headerY + 60).stroke(lineColor);
+    };
+
+    addHeaderFooter();
+
+    const patientName = `Patient Name: ${prescription.patientName}`;
+    const patientAge = `Patient Age: ${prescription.patientAge}`;
+    const consultationDate = `Consultation Date: ${prescription.meetingDate.toISOString().split('T')[0]}`;
+    const consultationTime = `Consultation Time: ${prescription.meetingTime}`;
+
+    doc.font('Matter-Regular').fontSize(12).fillColor(textColor)
+      .text(patientName, 40)
+      .moveDown(0.5)
+      .text(patientAge)
+      .moveDown(0.5)
+      .text(consultationDate)
+      .moveDown(0.5)
+      .text(consultationTime)
       .moveDown(1.5);
 
-    doc
-      .font('Times-Bold') 
-      .fontSize(12)
-      .text(` ${doctor.name}`, doctorInfoX, headerY, { align: 'right' })
-      .font('Times-Roman') 
-      .text(`${doctor.speciality.join(', ')}`, doctorInfoX, headerY + 15, { align: 'right' })
-      .font('Times-Italic') 
-      .text(`${prescription.doctorEmail}`, doctorInfoX, headerY + 30, { align: 'right' })
-      .moveDown();
-
-    doc
-      .moveTo(40, headerY + 60)
-      .lineTo(570, headerY + 60)
-      .stroke()
-      .moveDown(2);
-
-    doc
-      .font('Times-Roman') 
-      .fontSize(12)
-      .text(`Patient Name: ${prescription.patientName}`, 40)
-      .moveDown(0.5)
-      .text(`Patient Age: ${prescription.patientAge}`)
-      .moveDown(0.5)
-      .text(`Consultation Type: ${booking.consultationType}`)
-      .moveDown(1.5);
-
-    doc
-      .fontSize(14)
-      .font('Times-Bold')
+    doc.fontSize(14).font('Matter-Medium').fillColor(textColor)
       .text('Medicines', { underline: true })
       .moveDown()
-      .font('Times-Roman') 
-      .fontSize(12);
+      .font('Matter-Regular').fontSize(12);
 
     const medicineLineSpacing = 0.5;
+    let medicineCount = 0;
 
-    prescription.medicines.forEach(medicine => {
-      doc
-        .font('Times-Bold') 
+    prescription.medicines.forEach((medicine) => {
+      if (medicineCount >= 4 || (doc.y + 60 > doc.page.height - 100)) {
+        doc.addPage();
+        addHeaderFooter();
+        medicineCount = 0;
+      }
+
+      doc.font('Matter-SemiBold').fillColor(textColor)
         .text(`• Name: ${medicine.name}`)
         .moveDown(medicineLineSpacing)
-        .font('Times-Roman') 
+        .font('Matter-Regular')
         .text(`  - Dosage: ${medicine.dosage}`)
         .moveDown(medicineLineSpacing)
         .text(`  - Before Food: ${medicine.beforeFood ? 'Yes' : 'No'}`)
@@ -653,30 +721,25 @@ router.get('/prescriptions/:id/download', isLoggedIn, async (req, res) => {
         .moveDown(medicineLineSpacing)
         .text(`  - Timing: Morning: ${medicine.timing.morning ? 'Yes' : 'No'}, Afternoon: ${medicine.timing.afternoon ? 'Yes' : 'No'}, Night: ${medicine.timing.night ? 'Yes' : 'No'}`)
         .moveDown(1);
+
+      medicineCount++;
     });
 
-    doc
-      .moveDown()
-      .font('Times-Bold') 
-      .text('Doctor\'s Signature', { align: 'right' })
+    doc.moveDown(2).font('Matter-SemiBold').fillColor(textColor)
+      .text('Doctor\'s Signature')  
       .moveDown(0.4)
-      .font('Times-Italic') 
-      .text(doctor.name, { align: 'right', fontSize: 14 });
+      .font('Matter-Italic')
+      .text(doctor.name, { fontSize: 14 }); 
 
-    doc
-      .moveTo(40, doc.page.height - 100)
-      .lineTo(570, doc.page.height - 100)
-      .stroke();
+      const footerY = doc.page.height - 90; 
 
-    doc.y = doc.page.height - 90;
-    doc
-    .moveDown(0.5)
-      .font('Times-Bold') 
-      .fontSize(12)
+      doc.moveTo(40, footerY).lineTo(570, footerY).stroke();
+
+    doc.y = footerY + 10;
+    doc.moveDown(0.5).font('Matter-Medium').fontSize(12).fillColor(textColor)
       .text(hospital.name, { align: 'center' })
       .moveDown(0.4)
-      .font('Times-Italic') 
-      .fontSize(10)
+      .font('Matter-Italic').fontSize(10)
       .text(
         `${hospital.location.street}, ${hospital.location.city}, ${hospital.location.state}, ${hospital.location.country} - ${hospital.location.zip}`,
         { align: 'center' }

@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+
+const reviewSchema = new mongoose.Schema({
+  patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true },
+  rating: { type: Number, min: 1, max: 5, required: true },
+  reviewText: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const doctorSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -9,6 +17,7 @@ const doctorSchema = new mongoose.Schema({
   verificationToken: String,
   isVerified: { type: Boolean, default: false },
   title: String,
+  aboutMe: { type: String },
   speciality: { type: [String], required: true },
   country: String,
   state: String,
@@ -61,6 +70,7 @@ const doctorSchema = new mongoose.Schema({
   consultationsCompleted: { type: Number, default: 0 },
   profileViews: { type: Number, default: 0 },
   conditions: [String],
+  reviews: [reviewSchema], 
   subscriptionType: { type: String, default: "Free" },
   paymentDetails: { type: String },
   documents: {
@@ -68,7 +78,9 @@ const doctorSchema = new mongoose.Schema({
     certificationProof: { data: Buffer, contentType: String },
     businessProof: { data: Buffer, contentType: String }
   },
-  subscriptionVerification: { type: String, enum: ['Pending', 'Verified', 'Rejected'], default: 'Pending' }
+  subscriptionVerification: { type: String, enum: ['Pending', 'Verified', 'Rejected'], default: 'Pending' },
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
 });
 
 module.exports = mongoose.model('Doctor', doctorSchema);

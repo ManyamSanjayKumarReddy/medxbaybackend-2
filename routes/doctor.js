@@ -65,8 +65,6 @@ router.get('/doctor-index', isDoctor, isLoggedIn, async (req, res) => {
         if (!doctor) {
             return res.status(404).send('Doctor not found');
         }
-
-        // Fetch only blogs that are verified
         const blogs = await Blog.find({ priority: 'high', verificationStatus: 'Verified' }).limit(5).exec();
 
         res.render('doctor-index', { doctor, blogs, user: req.session.user });
@@ -133,8 +131,10 @@ router.get('/profile', isLoggedIn, async (req, res) => {
         }];
       }
   
+      // Prepare update data including "aboutMe"
       const updateData = {
         ...req.body,
+        aboutMe: req.body.aboutMe || doctor.aboutMe,  // Ensure "aboutMe" is included in update
         speciality: Array.isArray(req.body.speciality) ? req.body.speciality : [req.body.speciality],
         languages: Array.isArray(req.body.languages) ? req.body.languages : [req.body.languages],
         insurances: Array.isArray(req.body.insurances) ? req.body.insurances : [req.body.insurances],
@@ -160,6 +160,7 @@ router.get('/profile', isLoggedIn, async (req, res) => {
       res.status(500).send('Server Error');
     }
   });
+  
   
 router.post('/profile/verify', isLoggedIn, async (req, res) => {
     try {
@@ -393,6 +394,33 @@ router.get('/completed-bookings', isLoggedIn, checkSubscription, async (req, res
     }
 });
 
+router.get('/reviews/:doctorId', isLoggedIn, async (req, res) => {
+    try {
+        const doctorId = req.params.doctorId;
+        if (!doctorId) {
+            return res.status(400).send('Doctor ID is required');
+        }
+
+        const doctor = await Doctor.findById(doctorId)
+            .populate({
+                path: 'reviews.patientId', 
+                select: 'name' 
+            });
+
+        if (!doctor) {
+            return res.status(404).send('Doctor not found');
+        }
+
+        const reviews = doctor.reviews;
+
+        res.render('doctorReviews', { reviews, doctor });
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+
 router.get('/bookings/:id/prescription', isLoggedIn, checkSubscription, async (req, res) => {
     try {
         const bookingId = req.params.id;
@@ -426,7 +454,7 @@ router.get('/bookings/:id/prescription', isLoggedIn, checkSubscription, async (r
 });
 
 
-router.post('/prescriptions/upload',isLoggedIn, checkSubscription, async (req, res) => {
+router.post('/prescriptions/upload', isLoggedIn, checkSubscription, async (req, res) => {
     try {
         const { patientId, doctorId, patientName, doctorName, doctorSpeciality, doctorEmail, patientAge, medicines, meetingDate, meetingTime } = req.body;
 
@@ -456,12 +484,23 @@ router.post('/prescriptions/upload',isLoggedIn, checkSubscription, async (req, r
         });
 
         await prescription.save();
+
+        const downloadLink = `${req.protocol}://${req.get('host')}/patient/prescriptions/${prescription._id}/download`;
+
+        const chatMessage = `You have a new prescription from Dr. ${doctorName}. You can download it using the following link: ${downloadLink}`;
+        await Chat.findOneAndUpdate(
+            { doctorId: doctorId, patientId: patientId },
+            { $push: { messages: { senderId: doctorId, text: chatMessage, timestamp: new Date() } } },
+            { upsert: true, new: true }
+        );
+
         res.redirect('/doctor/completed-bookings');
     } catch (error) {
         console.error(error.message);
         res.status(500).send('Server Error');
     }
 });
+
 
 router.get('/doctor-view/:id/prescriptions', isLoggedIn, checkSubscription, async (req, res) => {
     try {
@@ -489,14 +528,46 @@ router.get('/manage-time-slots', isLoggedIn, checkSubscription, async (req, res)
         if (!doctor) {
             return res.status(404).send('Doctor not found');
         }
-        
-        res.render('manageTimeSlots', { doctor });
+
+        const currentDate = new Date();
+        let currentMonth = parseInt(req.query.month) || currentDate.getMonth();
+        let currentYear = parseInt(req.query.year) || currentDate.getFullYear();
+
+        if (currentMonth < 0 || currentMonth > 11) {
+            currentMonth = currentDate.getMonth();
+        }
+        if (currentYear < 1900 || currentYear > 2100) {
+            currentYear = currentDate.getFullYear();
+        }
+
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+        const bookings = await Booking.find({
+            doctor: doctor._id,
+            date: {
+                $gte: new Date(currentYear, currentMonth, 1),
+                $lte: new Date(currentYear, currentMonth, daysInMonth, 23, 59, 59)
+            },
+            status: 'accepted'
+        });
+
+        res.render('manageTimeSlots', {
+            doctor,
+            currentMonth,
+            currentYear,
+            daysInMonth,
+            timeSlots: doctor.timeSlots,
+            bookings, 
+            months: [
+                'January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'
+            ]
+        });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');
     }
 });
-
 
 router.delete('/manage-time-slots/:index', isLoggedIn, checkSubscription, async (req, res) => {
     try {
@@ -929,15 +1000,12 @@ router.get('/dashboard', isLoggedIn, checkSubscription, async (req, res) => {
             return res.status(404).send('Doctor not found');
         }
 
-        // Fetch chats and include patientId
         const chats = await Chat.find({ doctorId: doctor._id })
             .populate('patientId', 'name')
             .sort({ updatedAt: -1 })
-            .lean(); // Use lean() to get plain JavaScript objects
+            .lean(); 
 
-        // Calculate unread message counts for each chat
         chats.forEach(chat => {
-            // Count unread messages where the sender is not the doctor
             chat.unreadCount = chat.messages.filter(message => 
                 !message.read && message.senderId.toString() !== doctor._id.toString()
             ).length;
@@ -999,7 +1067,6 @@ router.get('/chat/:id', isLoggedIn, checkSubscription, async (req, res) => {
             return res.status(404).send('Chat not found');
         }
 
-        // Update only received messages (senderId != logged-in user's ID)
         const updatedChat = await Chat.findById(chatId);
 
         if (updatedChat) {
@@ -1145,8 +1212,6 @@ router.post('/notifications/:id/mark-read', isLoggedIn, async (req, res) => {
     }
 });
 
-
-// Delete notification route
 router.post('/notifications/:id/delete', isLoggedIn, async (req, res) => {
     try {
         await Notification.findByIdAndDelete(req.params.id);
