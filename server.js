@@ -41,7 +41,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   store: sessionStore,
-  cookie: { maxAge: 180 * 60 * 1000 } 
+  cookie: { secure: false, maxAge: 10800000 } 
 }));
 
 app.use(flash());
@@ -96,6 +96,14 @@ function isLoggedIn(req, res, next) {
   }
   res.redirect('/auth/login');
 }
+app.get('/protected', isLoggedIn, (req, res) => {
+  res.send('This is a protected route');
+});
+
+app.get('/', (req, res) => {
+  const user = req.user;
+  res.render('index', { user });
+});
 
 app.get('/', (req, res) => {
   const user = req.user;
@@ -186,6 +194,35 @@ app.get('/auth/search-doctors', async (req, res) => {
     res.status(500).json({ message: 'Error fetching doctors', error });
   }
 });
+
+
+app.get('/doctor/profile', async (req, res) => {
+  try {
+    if (!req.session || !req.session.doctorId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const doctor = await Doctor.findById(req.session.doctorId);
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+
+
+    res.json({
+      email: doctor.email,
+      name: doctor.name,
+      title: doctor.title,
+      about: doctor.about,
+      dob: doctor.dob,
+ 
+    });
+  } catch (error) {
+    console.error('Error fetching doctor profile:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
 
 app.get('/auth/countries', async (req, res) => {
   try {

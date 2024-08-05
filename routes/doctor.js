@@ -21,25 +21,23 @@ require('dotenv').config();
 console.log('EMAIL_USER:', process.env.EMAIL_USER);
 console.log('EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD);
 
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+
+const upload = multer({ dest: 'uploads/' });
+
 
 router.use(methodOverride('_method'));
 
 function isLoggedIn(req, res, next) {
-    if (req.session && req.session.user && req.session.user.role === 'doctor') {
-        req.user = req.session.user;
-        return next();
+    if (req.session && req.session.user) {
+      return next();
     } else {
-        console.warn('Unauthorized access attempt:', {
-            ip: req.ip,
-            originalUrl: req.originalUrl,
-            user: req.session.user ? req.session.user.email : 'Guest'
-        });
-        res.redirect('/auth/login');
+      res.status(401).json({ success: false, message: 'Unauthorized access attempt.' });
     }
-}
+  }
+  
+  
 
+  
 function checkSubscription(req, res, next) {
     const user = req.session.user;
     if (user.subscriptionType === 'Premium' || user.subscriptionType === 'Standard') {
@@ -74,10 +72,11 @@ router.get('/doctor-index', isDoctor, isLoggedIn, async (req, res) => {
     }
 });
 
-
 router.get('/profile', isLoggedIn, async (req, res) => {
     try {
       const doctorEmail = req.session.user.email;
+      console.log('Doctor email from session:', doctorEmail);  // Debugging log
+  
       const doctor = await Doctor.findOne({ email: doctorEmail }).lean();
       if (!doctor) {
         return res.status(404).send('Doctor not found');
@@ -91,24 +90,52 @@ router.get('/profile', isLoggedIn, async (req, res) => {
   
   router.get('/edit', isLoggedIn, async (req, res) => {
     try {
+      if (!req.session.user || !req.session.user.email) {
+        return res.status(401).json({ error: 'Unauthorized access' });
+      }
+  
       const doctorEmail = req.session.user.email;
+      console.log('Doctor email from session in edit route:', doctorEmail);  // Debugging log
+  
       const doctor = await Doctor.findOne({ email: doctorEmail }).lean();
+      if (!doctor) {
+        return res.status(404).json({ error: 'Doctor not found' });
+      }
   
       if (!doctor.hospitals) {
         doctor.hospitals = [];
       }
   
-      res.render('editDoctorProfile', { doctor });
+      res.json(doctor);
     } catch (err) {
       console.error(err.message);
-      res.status(500).send('Server Error');
+      res.status(500).json({ error: 'Server Error' });
     }
   });
   
-  router.post('/profile/update', upload.single('profilePicture'), isLoggedIn, async (req, res) => {
+  router.get('/profile/update', isLoggedIn, async (req, res) => {
+    try {
+      const doctorEmail = req.session.user.email;
+      const doctor = await Doctor.findOne({ email: doctorEmail });
+      if (!doctor) {
+        return res.status(404).json({ error: 'Doctor not found' });
+      }
+      res.json(doctor); // Ensure this line sends JSON data
+    } catch (error) {
+      console.error('Error fetching doctor details:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  
+
+  router.post('/profile/update', upload.single('profilePicture'), async (req, res) => {
     try {
       const doctorEmail = req.session.user.email;
       let doctor = await Doctor.findOne({ email: doctorEmail });
+  
+      if (!doctor) {
+        return res.status(404).json({ success: false, message: 'Doctor not found' });
+      }
   
       let hospitals = [];
       if (Array.isArray(req.body.hospitals)) {
@@ -131,15 +158,13 @@ router.get('/profile', isLoggedIn, async (req, res) => {
         }];
       }
   
-      // Prepare update data including "aboutMe"
       const updateData = {
         ...req.body,
-        aboutMe: req.body.aboutMe || doctor.aboutMe,  // Ensure "aboutMe" is included in update
+        aboutMe: req.body.aboutMe || doctor.aboutMe,
         speciality: Array.isArray(req.body.speciality) ? req.body.speciality : [req.body.speciality],
         languages: Array.isArray(req.body.languages) ? req.body.languages : [req.body.languages],
         insurances: Array.isArray(req.body.insurances) ? req.body.insurances : [req.body.insurances],
         awards: Array.isArray(req.body.awards) ? req.body.awards : [req.body.awards],
-        faqs: Array.isArray(req.body.faqs) ? req.body.faqs : [req.body.faqs],
         hospitals: hospitals
       };
   
@@ -151,17 +176,16 @@ router.get('/profile', isLoggedIn, async (req, res) => {
       }
   
       doctor = await Doctor.findOneAndUpdate({ email: doctorEmail }, updateData, { new: true });
-  
       await doctor.save();
   
-      res.redirect('/doctor/profile');
+      res.json({ success: true, message: 'Profile updated successfully', doctor });
     } catch (err) {
       console.error(err.message);
-      res.status(500).send('Server Error');
+      res.status(500).json({ success: false, message: 'Server Error' });
     }
   });
   
-  
+
 router.post('/profile/verify', isLoggedIn, async (req, res) => {
     try {
         const doctorEmail = req.session.user.email;
@@ -185,11 +209,14 @@ router.post('/profile/verify', isLoggedIn, async (req, res) => {
 router.get('/bookings', isLoggedIn, checkSubscription, async (req, res) => {
     try {
         const bookings = await Booking.find({ doctor: req.session.user._id }).populate('patient');
-        res.render('doctorBookings', { bookings });
+        res.json({ bookings });
     } catch (error) {
         console.error(error.message);
-        res.status(500).send('Server Error');
-    }
+        if (req.accepts('html')) {
+            res.status(500).send('Server Error');
+        } else if (req.accepts('json')) {
+            res.status(500).json({ error: 'Server Error' });
+    }}
 });
 
 router.get('/subscription-message', isLoggedIn, (req, res) => {

@@ -1,23 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Doctor Profile: <%= doctor.name %></title>
+    <style>
+    </style>
 </head>
-
 <body>
     <h1>Doctor Profile: <%= doctor.name %></h1>
-    <p><strong>Specialty:</strong> <%= doctor.speciality.join(', ') %></p>
-    <p><strong>Location:</strong> <%= doctor.city %>, <%= doctor.state %>, <%= doctor.country %></p>
-    <p><strong>Languages Spoken:</strong> <%= doctor.languages.join(', ') %></p>
-    <p><strong>Gender:</strong> <%= doctor.gender %></p>
-    <p><strong>Availability:</strong> <%= doctor.availability ? 'Available' : 'Not Available' %></p>
-    <p><strong>Profile Views:</strong> <%= doctor.profileViews || 0 %></p>
+    <div class="doctor-profile">
+        <% if (doctor.profilePicture && doctor.profilePicture.data) { %>
+            <img src="data:<%= doctor.profilePicture.contentType %>;base64,<%= doctor.profilePicture.data.toString('base64') %>" alt="Profile Picture" width="150" height="150">
+        <% } %>
+        <div class="doctor-profile-details">
+            <p><strong>Title:</strong> <%= doctor.title %></p>
+            <h3>About Me</h3>
+            <p><%= doctor.aboutMe || 'No information available.' %></p>
+            <p><strong>Specialty:</strong> <%= doctor.speciality.join(', ') %></p>
+            <p><strong>Rating:</strong> <%= doctor.rating %> / 5</p>
+            <p><strong>Languages Spoken:</strong> <%= doctor.languages.join(', ') %></p>
+            
+            <h3>Insurances:</h3>
+            <ul>
+                <% insurances.forEach(insurance => { %>
+                    <li>
+                        <% if (insurance.logo && insurance.logo.data) { %>
+                            <img src="data:<%= insurance.logo.contentType %>;base64,<%= insurance.logo.data.toString('base64') %>" alt="<%= insurance.name %> logo" style="width: 100px; height: auto;">
+                        <% } else { %>
+                            <span>No logo available</span>
+                        <% } %>
+                        <span><%= insurance.name %></span>
+                    </li>
+                <% }) %>
+            </ul>
 
-    <h2>Consultation Information</h2>
-    <p><strong>Consultation Type:</strong> <%= doctor.consultation %></p>
+            <p><strong>Awards:</strong> <%= doctor.awards.join(', ') %></p>
+            <p><strong>Conditions Managed:</strong> <%= doctor.conditions.join(', ') %></p>
+            <p><strong>Location:</strong> <%= doctor.city %>, <%= doctor.state %>, <%= doctor.country %></p>
+            <p><strong>Consultation Type:</strong> <%= doctor.consultation %></p>
+            <p><strong>Website:</strong> <a href="<%= doctor.website %>" target="_blank"><%= doctor.website %></a></p>
+            <p><strong>Social Media:</strong></p>
+            <ul>
+                <% if (doctor.socialHandles) { %>
+                    <% if (doctor.socialHandles.twitter) { %>
+                        <li><a href="<%= doctor.socialHandles.twitter %>" target="_blank">Twitter</a></li>
+                    <% } %>
+                    <% if (doctor.socialHandles.facebook) { %>
+                        <li><a href="<%= doctor.socialHandles.facebook %>" target="_blank">Facebook</a></li>
+                    <% } %>
+                    <% if (doctor.socialHandles.linkedin) { %>
+                        <li><a href="<%= doctor.socialHandles.linkedin %>" target="_blank">LinkedIn</a></li>
+                    <% } %>
+                    <% if (doctor.socialHandles.instagram) { %>
+                        <li><a href="<%= doctor.socialHandles.instagram %>" target="_blank">Instagram</a></li>
+                    <% } %>
+                <% } %>
+            </ul>
+        </div>
+    </div>
 
     <% if (doctor.timeSlots && doctor.timeSlots.length > 0) { %>
         <h2>Available Time Slots</h2>
@@ -25,13 +66,13 @@
             <% doctor.timeSlots.forEach(slot => { %>
                 <li>
                     <% if (slot.date) { %>
-                        <p><strong>Date:</strong> <%= slot.date.toDateString() %></p>
+                        <p><strong>Date:</strong> <%= new Date(slot.date).toDateString() %></p>
                     <% } else { %>
                         <p><strong>Date:</strong> N/A</p>
                     <% } %>
 
-                    <% if (slot.startTime && slot.endTime) { %>
-                        <p><strong>Time:</strong> <%= slot.startTime %> - <%= slot.endTime %></p>
+                    <% if (slot.startTime) { %>
+                        <p><strong>Time:</strong> <%= slot.startTime %></p>
                     <% } else { %>
                         <p><strong>Time:</strong> N/A</p>
                     <% } %>
@@ -52,7 +93,7 @@
                         <form action="/patient/book" method="POST">
                             <input type="hidden" name="doctorId" value="<%= doctor._id %>">
                             <input type="hidden" name="date" value="<%= slot.date.toISOString() %>">
-                            <input type="hidden" name="time" value="<%= slot.startTime %> - <%= slot.endTime %>">
+                            <input type="hidden" name="startTime" value="<%= slot.startTime %>">
                             
                             <label for="consultationType"><strong>Consultation Type:</strong></label>
                             <select id="consultationType" name="consultationType">
@@ -72,6 +113,38 @@
         <p>No available time slots.</p>
     <% } %>
 
+    <h2>Reviews</h2>
+    <% if (doctor.reviews && doctor.reviews.length > 0) { %>
+        <ul>
+            <% doctor.reviews.forEach(review => { %>
+                <li>
+                    <p><strong>Patient Name:</strong> <%= review.patientId.name %></p>
+                    <p><strong>Date:</strong> <%= review.createdAt ? new Date(review.createdAt).toLocaleDateString() : 'N/A' %></p>
+                    <p><strong>Rating:</strong> <%= review.rating %> / 5</p>
+                    <p><strong>Review:</strong> <%= review.reviewText %></p>
+                </li>
+            <% }) %>
+        </ul>
+    <% } %>
+    
+    <h2>Blogs</h2>
+    <% if (blogs && blogs.length > 0) { %>
+        <ul>
+            <% blogs.forEach(blog => { %>
+                <li class="blog-card">
+                    <% if (blog.image && blog.image.data) { %>
+                        <img src="data:<%= blog.image.contentType %>;base64,<%= blog.image.data.toString('base64') %>" alt="Blog Image" width="100">
+                    <% } %>
+                    <div>
+                        <h3><%= blog.title %></h3>
+                        <p><%= blog.description %></p>
+                        <a href="/blogs/view/<%= blog._id %>">Learn More</a>
+                    </div>
+                </li>
+            <% }) %>
+        </ul>
+    <% } %>
+
     <form action="/patient/add-to-favorites" method="POST">
         <input type="hidden" name="doctorId" value="<%= doctor._id %>">
         <button type="submit">Add to Favorites</button>
@@ -79,5 +152,4 @@
 
     <a href="/patient/doctors">Back to Doctors List</a>
 </body>
-
 </html>

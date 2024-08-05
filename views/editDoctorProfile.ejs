@@ -226,12 +226,12 @@
       <div id="hospitals-container">
         <% doctor.hospitals.forEach((hospital, index) => { %>
           <div class="input-group">
-            <input type="text" name="hospitals[<%= index %>][name]" class="form-control" value="<%= hospital.name %>" placeholder="Hospital Name" required>
-            <input type="text" name="hospitals[<%= index %>][street]" class="form-control" value="<%= hospital.street %>" placeholder="Hospital Street" required>
-            <input type="text" name="hospitals[<%= index %>][city]" class="form-control" value="<%= hospital.city %>" placeholder="Hospital City" required>
-            <input type="text" name="hospitals[<%= index %>][state]" class="form-control" value="<%= hospital.state %>" placeholder="Hospital State" required>
-            <input type="text" name="hospitals[<%= index %>][country]" class="form-control" value="<%= hospital.country %>" placeholder="Hospital Country" required>
-            <input type="text" name="hospitals[<%= index %>][zip]" class="form-control" value="<%= hospital.zip %>" placeholder="Hospital ZIP" required>
+            <input type="text" name="hospitals[<%= index %>][name]" class="form-control" value="<%= hospital.name %>" placeholder="Hospital Name" >
+            <input type="text" name="hospitals[<%= index %>][street]" class="form-control" value="<%= hospital.street %>" placeholder="Hospital Street" >
+            <input type="text" name="hospitals[<%= index %>][city]" class="form-control" value="<%= hospital.city %>" placeholder="Hospital City" >
+            <input type="text" name="hospitals[<%= index %>][state]" class="form-control" value="<%= hospital.state %>" placeholder="Hospital State" >
+            <input type="text" name="hospitals[<%= index %>][country]" class="form-control" value="<%= hospital.country %>" placeholder="Hospital Country" >
+            <input type="text" name="hospitals[<%= index %>][zip]" class="form-control" value="<%= hospital.zip %>" placeholder="Hospital ZIP" >
             <button type="button" class="btn btn-danger" onclick="this.parentElement.remove()">Remove</button>
           </div>
         <% }) %>

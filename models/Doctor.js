@@ -21,7 +21,7 @@ const doctorSchema = new mongoose.Schema({
   speciality: { type: [String], required: true },
   country: String,
   state: String,
-  city: String,
+  cities: String,
   location: String,
   gender: String,
   availability: String,
@@ -29,24 +29,24 @@ const doctorSchema = new mongoose.Schema({
   bloodGroup: String,
   languages: [String],
   hospitals: [{
-    name: { type: String, required: true },
-    street: { type: String, required: true },
-    city: { type: String, required: true },
-    state: { type: String, required: true },
-    country: { type: String, required: true },
-    zip: { type: String, required: true }
+    name: { type: String,  },
+    street: { type: String,  },
+    city: { type: String, },
+    state: { type: String, },
+    country: { type: String,  },
+    zip: { type: String,  }
   }],
   insurances: [String],
-  consultation: { type: String, enum: ['In-person', 'Video call', 'Both'], default: 'In-person' },
+  consultation: { type: String, enum: ['In-person', 'Video call', 'In-person & Video call'], default: 'In-person' },
   awards: [String],
   faqs: [String],
   website: String,
-  socialHandles: {
+
     twitter: String,
     facebook: String,
     linkedin: String,
-    instagram: String
-  },
+    instagram: String,
+
   profilePicture: {
     data: Buffer,
     contentType: String

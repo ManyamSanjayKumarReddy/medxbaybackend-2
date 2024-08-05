@@ -176,6 +176,8 @@ router.get('/verify-email', async (req, res) => {
 });
 
 
+
+
 router.get('/login', (req, res) => {
   res.render('login');
 });
@@ -202,24 +204,18 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid Credentials' });
     }
 
+    req.session.user = {
+      _id: user._id,
+      email: user.email,
+      role: user.role
+    };
 
-    req.session.user = user;
-
-    const token = "generatedToken"; 
-
-    return res.status(200).json({
-      success: true,
-      role: user.role,
-      redirectUrl: `/auth/${user.role}-index`,
-      token
-    });
-
+    return res.status(200).json({ success: true, message: 'Login successful', user });
   } catch (err) {
     console.error('Error in login:', err);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 });
-
 
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;

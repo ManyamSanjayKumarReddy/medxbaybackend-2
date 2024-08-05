@@ -124,7 +124,7 @@ router.get('/doctors', async (req, res) => {
     const doctors = await Doctor.find({ verified: 'Verified' })
       .populate({
         path: 'hospitals',
-        select: 'name city -_id' 
+        select: 'name city -_id'
       })
       .sort(sortCriteria);
 
@@ -134,23 +134,32 @@ router.get('/doctors', async (req, res) => {
     const specialities = await Doctor.distinct('speciality');
     const languages = await Doctor.distinct('languages');
     const genders = await Doctor.distinct('gender');
+    const hospital = await Doctor.distinct('hospital');
 
-    res.render('patientDoctors', {
+    // res.render('patientDoctors', {
+    //   doctors,
+    //   countries,
+    //   states,
+    //   cities,
+    //   specialities,
+    //   languages,
+    //   genders
+    // });
+    res.json({
       doctors,
       countries,
       states,
       cities,
       specialities,
       languages,
-      genders
+      genders,
+      hospital
     });
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server Error');
+    res.status(500).json({ error: 'Server Error' });
   }
 });
-
-
 router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
   try {
       const doctorId = req.params.id;
@@ -159,24 +168,36 @@ router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
               path: 'reviews.patientId',
               select: 'name'
           });
+
       if (!doctor) {
           return res.status(404).send('Doctor not found');
       }
 
+      const insurances = await Insurance.find({ '_id': { $in: doctor.insurances } }).select('name logo');
       const blogs = await Blog.find({ authorId: doctorId, verificationStatus: 'Verified' });
 
-      res.render('doctorProfileView', { doctor, blogs });
+      if (req.accepts('html')) {
+          res.render('doctorProfileView', { doctor, insurances, blogs });
+      } else if (req.accepts('json')) {
+          res.json({ doctor, insurances, blogs });
+      } else {
+          res.status(406).send('Not Acceptable');
+      }
   } catch (error) {
       console.error(error.message);
-      res.status(500).send('Server Error');
+      if (req.accepts('html')) {
+          res.status(500).send('Server Error');
+      } else if (req.accepts('json')) {
+          res.status(500).json({ error: 'Server Error' });
+      } else {
+          res.status(406).send('Not Acceptable');
+      }
   }
 });
 
-
-
 router.post('/book', isLoggedIn, async (req, res) => {
   try {
-      const { doctorId, date, time, consultationType } = req.body;
+      const { doctorId, date, startTime, consultationType } = req.body;
       const patientId = req.session.user._id;
 
       const doctor = await Doctor.findById(doctorId);
@@ -185,7 +206,7 @@ router.post('/book', isLoggedIn, async (req, res) => {
       }
 
       const slot = doctor.timeSlots.find(slot =>
-          slot && slot.date && slot.date.toISOString() === new Date(date).toISOString() && slot.startTime === time.split(' - ')[0]
+          slot && slot.date && slot.date.toISOString() === new Date(date).toISOString() && slot.startTime === startTime
       );
 
       if (!slot) {
@@ -196,7 +217,7 @@ router.post('/book', isLoggedIn, async (req, res) => {
           patient: patientId,
           doctor: doctorId,
           date: new Date(date),
-          time: time,
+          time: `${slot.startTime} - ${slot.endTime}`,
           consultationType: consultationType,
           status: 'waiting',
           hospital: {
@@ -216,6 +237,7 @@ router.post('/book', isLoggedIn, async (req, res) => {
       res.status(500).send('Server Error');
   }
 });
+
 
 
 
