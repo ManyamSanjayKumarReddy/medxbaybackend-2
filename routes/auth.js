@@ -209,7 +209,7 @@ router.post('/login', async (req, res) => {
       email: user.email,
       role: user.role
     };
-
+    console.log('Session data after login:', req.session);
     return res.status(200).json({ success: true, message: 'Login successful', user });
   } catch (err) {
     console.error('Error in login:', err);

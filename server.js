@@ -41,7 +41,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   store: sessionStore,
-  cookie: { secure: false, maxAge: 10800000 } 
+  cookie: { maxAge: 180 * 60 * 1000 } 
 }));
 
 app.use(flash());

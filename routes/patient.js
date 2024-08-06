@@ -17,12 +17,14 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 function isLoggedIn(req, res, next) {
+  console.log('Session data:', req.session);
   if (req.session.user && req.session.user.role === 'patient') {
     req.user = req.session.user;
     return next();
   }
-  res.redirect('/auth/login');
+  res.status(401).json({ error: 'Unauthorized access. Please log in.' });
 }
+
 
 router.get('/patient-index', async (req, res) => {
   try {
@@ -196,47 +198,58 @@ router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
 });
 
 router.post('/book', isLoggedIn, async (req, res) => {
+  console.log('User from session:', req.session.user);
   try {
-      const { doctorId, date, startTime, consultationType } = req.body;
-      const patientId = req.session.user._id;
+    const { doctorId, date, time, consultationType } = req.body;
+    const patientId = req.user._id;
 
-      const doctor = await Doctor.findById(doctorId);
-      if (!doctor) {
-          return res.status(404).send('Doctor not found');
+    console.log('Request body:', req.body);
+    console.log('Patient ID:', patientId);
+
+    if (!doctorId || !date || !time || !consultationType) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const doctor = await Doctor.findById(doctorId);
+    if (!doctor) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    const slot = doctor.timeSlots.find(slot =>
+      slot &&
+      slot.date &&
+      new Date(slot.date).toISOString() === new Date(date).toISOString() &&
+      slot.startTime === time
+    );
+
+    if (!slot) {
+      return res.status(400).json({ error: 'Time slot not available' });
+    }
+
+    const booking = new Booking({
+      patient: patientId,
+      doctor: doctorId,
+      date: new Date(date),
+      time: `${slot.startTime} - ${slot.endTime}`,
+      consultationType,
+      status: 'waiting',
+      hospital: {
+        name: slot.hospital,
+        location: slot.hospitalLocation
       }
+    });
 
-      const slot = doctor.timeSlots.find(slot =>
-          slot && slot.date && slot.date.toISOString() === new Date(date).toISOString() && slot.startTime === startTime
-      );
+    await booking.save();
+    slot.status = 'booked';
+    await doctor.save();
 
-      if (!slot) {
-          return res.status(400).send('Time slot not found');
-      }
-
-      const booking = new Booking({
-          patient: patientId,
-          doctor: doctorId,
-          date: new Date(date),
-          time: `${slot.startTime} - ${slot.endTime}`,
-          consultationType: consultationType,
-          status: 'waiting',
-          hospital: {
-              name: slot.hospital,
-              location: slot.hospitalLocation
-          }
-      });
-
-      await booking.save();
-
-      slot.status = 'booked';
-      await doctor.save();
-
-      res.redirect('/patient/bookings');
+    res.status(200).json({ message: 'Booking successful' });
   } catch (error) {
-      console.error(error.message);
-      res.status(500).send('Server Error');
+    console.error('Booking error:', error);
+    res.status(500).json({ error: 'Server Error' });
   }
 });
+
 
 
 
