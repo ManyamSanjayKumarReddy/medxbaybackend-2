@@ -257,15 +257,17 @@ router.post('/book', isLoggedIn, async (req, res) => {
 
 
 router.get('/bookings', isLoggedIn, async (req, res) => {
-  
   try {
     const bookings = await Booking.find({ patient: req.session.user._id }).populate('doctor');
-    res.render('patientBookings', { bookings });
+    res.json({ bookings });
+    console.log({bookings});
+    
   } catch (error) {
     console.error(error.message);
-    res.status(500).send('Server Error');
+    res.status(500).json({ message: 'Server Error' });
   }
 });
+
 
 router.get('/review/:doctorId/:bookingId', isLoggedIn, async (req, res) => {
   try {
@@ -520,30 +522,28 @@ function escapeRegex(text) {
 
 router.get('/dashboard', isLoggedIn, async (req, res) => {
   try {
-      const patient = await Patient.findOne({ email: req.session.user.email }).lean();
-      if (!patient) {
-          return res.status(404).send('Patient not found');
-      }
+    const patient = await Patient.findOne({ email: req.user.email }).lean();
+    if (!patient) {
+      return res.status(404).send('Patient not found');
+    }
 
-      const chats = await Chat.find({ patientId: patient._id })
-          .populate('doctorId', 'name')
-          .sort({ updatedAt: -1 })
-          .lean();
+    const chats = await Chat.find({ patientId: patient._id })
+      .populate('doctorId', 'name')
+      .sort({ updatedAt: -1 })
+      .lean();
 
-      chats.forEach(chat => {
-          chat.unreadCount = chat.messages.filter(message => 
-              !message.read && message.senderId.toString() !== patient._id.toString()
-          ).length;
-      });
+    chats.forEach(chat => {
+      chat.unreadCount = chat.messages.filter(message => 
+        !message.read && message.senderId.toString() !== patient._id.toString()
+      ).length;
+    });
 
-      res.render('patientDashboard', { patient, chats });
+    return res.json({ patient, chats });
   } catch (err) {
-      console.error(err.message);
-      res.status(500).send('Server Error');
+    console.error(err.message);
+    return res.status(500).json({ error: 'Server Error' });
   }
 });
-
-
 router.get('/chat/:id', isLoggedIn, async (req, res) => {
   try {
     const chatId = req.params.id;
@@ -553,27 +553,20 @@ router.get('/chat/:id', isLoggedIn, async (req, res) => {
       return res.status(404).send('Chat not found');
     }
 
-    const updatedChat = await Chat.findById(chatId);
+    chat.messages.forEach(message => {
+      if (message.senderId.toString() !== req.user._id.toString() && !message.read) {
+        message.read = true;
+      }
+    });
 
-    if (updatedChat) {
-      updatedChat.messages.forEach(message => {
-        if (message.senderId.toString() !== req.user._id.toString() && !message.read) {
-          message.read = true;
-        }
-      });
-
-      await updatedChat.save();
-    }
-
-    res.render('patientChat', { chat: updatedChat.toObject() });
-
+    await Chat.updateOne({ _id: chatId }, { $set: { messages: chat.messages } });
+    
+    res.json({ chat });
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server Error');
+    return res.status(500).json({ error: 'Server Error' });
   }
 });
-
-
 
 router.post('/chats/:chatId/send-message', isLoggedIn, async (req, res) => {
   try {
@@ -588,14 +581,12 @@ router.post('/chats/:chatId/send-message', isLoggedIn, async (req, res) => {
     let chat = await Chat.findOneAndUpdate(
       { _id: chatId, patientId: patient._id },
       { $push: { messages: { senderId: patient._id, text: message, timestamp: new Date(), read: false } } },
-      { upsert: true, new: true }
-    );
+      { new: true }
+    ).populate('doctorId');
 
-    const doctor = await Doctor.findById(chat.doctorId);
-
-    if (doctor) {
+    if (chat.doctorId) {
       await Notification.create({
-        userId: doctor._id,
+        userId: chat.doctorId._id,
         message: `New message from ${patient.name}`,
         type: 'chat',
         read: false,
@@ -603,11 +594,10 @@ router.post('/chats/:chatId/send-message', isLoggedIn, async (req, res) => {
       });
     }
 
-    res.redirect(`/patient/chat/${chat._id}`);
-
+    res.json({ chat });
   } catch (error) {
     console.error(error.message);
-    res.status(500).send('Server Error');
+    return res.status(500).json({ error: 'Server Error' });
   }
 });
 
@@ -617,7 +607,7 @@ router.get('/prescriptions', isLoggedIn, async (req, res) => {
     const patientPrescriptions = await Prescription.find({ patientId: patientId })
       .sort({ createdAt: 'desc' });
 
-    res.render('patient-prescriptions', { prescriptions: patientPrescriptions });
+    res.json(patientPrescriptions); // Send the data as JSON
   } catch (error) {
     console.error(error.message);
     res.status(500).send('Server Error');

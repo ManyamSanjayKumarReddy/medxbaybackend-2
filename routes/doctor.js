@@ -423,9 +423,10 @@ router.get('/completed-bookings', isLoggedIn, checkSubscription, async (req, res
         const doctorId = req.session.user._id; 
         const completedBookings = await Booking.find({ doctor: doctorId, status: 'completed' })
                                                .populate('patient') 
+                                               .populate('doctor') // Ensure doctor is populated
                                                .sort({ date: 'desc' }); 
 
-        res.render('completed-bookings', { bookings: completedBookings });
+        res.json({ bookings: completedBookings });
     } catch (error) {
         console.error(error.message);
         res.status(500).send('Server Error');
@@ -524,7 +525,7 @@ router.post('/prescriptions/upload', isLoggedIn, checkSubscription, async (req, 
         await prescription.save();
 
         const downloadLink = `${req.protocol}://${req.get('host')}/patient/prescriptions/${prescription._id}/download`;
-
+  
         const chatMessage = `You have a new prescription from Dr. ${doctorName}. You can download it using the following link: ${downloadLink}`;
         await Chat.findOneAndUpdate(
             { doctorId: doctorId, patientId: patientId },
@@ -538,6 +539,7 @@ router.post('/prescriptions/upload', isLoggedIn, checkSubscription, async (req, 
         res.status(500).send('Server Error');
     }
 });
+
 
 
 router.get('/doctor-view/:id/prescriptions', isLoggedIn, checkSubscription, async (req, res) => {
