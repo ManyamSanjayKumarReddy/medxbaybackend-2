@@ -37,7 +37,7 @@ const doctorSchema = new mongoose.Schema({
     zip: { type: String,  }
   }],
   insurances: [String],
-  consultation: { type: String, enum: ['In-person', 'Video call', 'In-person & Video call'], default: 'In-person' },
+  consultation: { type: String, enum: ['In-person', 'Video call', 'Both'], default: 'In-person' },
   awards: [String],
   faqs: [String],
   website: String,

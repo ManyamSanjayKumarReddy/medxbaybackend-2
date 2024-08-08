@@ -207,7 +207,9 @@ router.post('/login', async (req, res) => {
     req.session.user = {
       _id: user._id,
       email: user.email,
-      role: user.role
+      role: user.role,
+      subscriptionType: user.subscriptionType,
+      subscriptionVerification: user.subscriptionVerification
     };
     console.log('Session data after login:', req.session);
     return res.status(200).json({ success: true, message: 'Login successful', user });
@@ -216,6 +218,7 @@ router.post('/login', async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 });
+
 
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;

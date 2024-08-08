@@ -28,7 +28,6 @@ const upload = multer({ dest: 'uploads/' });
 router.use(methodOverride('_method'));
 
 function isLoggedIn(req, res, next) {
-    console.log('Session data doctor:', req.session);
     if (req.session && req.session.user) {
       return next();
     } else {
@@ -39,15 +38,19 @@ function isLoggedIn(req, res, next) {
   
 
   
-function checkSubscription(req, res, next) {
+  function checkSubscription(req, res, next) {
     const user = req.session.user;
     if (user.subscriptionType === 'Premium' || user.subscriptionType === 'Standard') {
         if (user.subscriptionVerification === 'Verified') {
             return next();
         }
     }
-    res.redirect('/doctor/subscription-message');
+    res.status(403).json({ 
+        error: 'Subscription Required', 
+        message: 'You need to have a premium or standard subscription, and it must be verified to access this feature. Please upgrade or verify your subscription.' 
+    });
 }
+
 
 function isDoctor(req, res, next) {
     if (req.session.user && req.session.user.role === 'doctor') {
@@ -210,19 +213,26 @@ router.post('/profile/verify', isLoggedIn, async (req, res) => {
 router.get('/bookings', isLoggedIn, checkSubscription, async (req, res) => {
     try {
         const bookings = await Booking.find({ doctor: req.session.user._id }).populate('patient');
-        res.json({ bookings });
+
+        if (req.accepts('html')) {
+            res.render('doctorBookings', { bookings });
+        } else if (req.accepts('json')) {
+            res.json({ bookings });
+        } else {
+            res.status(406).send('Not Acceptable');
+        }
     } catch (error) {
         console.error(error.message);
         if (req.accepts('html')) {
             res.status(500).send('Server Error');
         } else if (req.accepts('json')) {
             res.status(500).json({ error: 'Server Error' });
-    }}
+        }
+    }
 });
 
-router.get('/subscription-message', isLoggedIn, (req, res) => {
-    res.render('subscriptionMessage');
-});
+
+
 
 
 router.post('/bookings/:id', isLoggedIn, async (req, res) => {

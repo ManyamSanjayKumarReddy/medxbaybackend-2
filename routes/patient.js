@@ -17,13 +17,20 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 function isLoggedIn(req, res, next) {
-  console.log('Session data:', req.session);
   if (req.session.user && req.session.user.role === 'patient') {
     req.user = req.session.user;
     return next();
   }
-  res.status(401).json({ error: 'Unauthorized access. Please log in.' });
+  
+
+  if (req.headers.accept && req.headers.accept.includes('application/json')) {
+    return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+  }
+  
+
+  res.redirect('/auth/login');
 }
+
 
 
 router.get('/patient-index', async (req, res) => {
@@ -198,63 +205,59 @@ router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
 });
 
 router.post('/book', isLoggedIn, async (req, res) => {
-  console.log('User from session:', req.session.user);
   try {
-    const { doctorId, date, time, consultationType } = req.body;
-    const patientId = req.user._id;
+      const { doctorId, date, startTime, consultationType } = req.body;
+      const patientId = req.session.user._id;
 
-    console.log('Request body:', req.body);
-    console.log('Patient ID:', patientId);
+   
+      console.log('Request body:', req.body);
+      console.log('Patient ID:', patientId);
 
-    if (!doctorId || !date || !time || !consultationType) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    const doctor = await Doctor.findById(doctorId);
-    if (!doctor) {
-      return res.status(404).json({ error: 'Doctor not found' });
-    }
-
-    const slot = doctor.timeSlots.find(slot =>
-      slot &&
-      slot.date &&
-      new Date(slot.date).toISOString() === new Date(date).toISOString() &&
-      slot.startTime === time
-    );
-
-    if (!slot) {
-      return res.status(400).json({ error: 'Time slot not available' });
-    }
-
-    const booking = new Booking({
-      patient: patientId,
-      doctor: doctorId,
-      date: new Date(date),
-      time: `${slot.startTime} - ${slot.endTime}`,
-      consultationType,
-      status: 'waiting',
-      hospital: {
-        name: slot.hospital,
-        location: slot.hospitalLocation
+      const doctor = await Doctor.findById(doctorId);
+      if (!doctor) {
+          return res.status(404).json({ error: 'Doctor not found' });
       }
-    });
 
-    await booking.save();
-    slot.status = 'booked';
-    await doctor.save();
+ 
 
-    res.status(200).json({ message: 'Booking successful' });
+      const requestDateString = new Date(date).toDateString();
+
+      const slot = doctor.timeSlots.find(slot =>
+          new Date(slot.date).toDateString() === requestDateString && slot.startTime === startTime
+      );
+
+      if (!slot) {
+          return res.status(400).json({ error: 'Time slot not found' });
+      }
+
+      const booking = new Booking({
+          patient: patientId,
+          doctor: doctorId,
+          date: new Date(date),
+          time: `${slot.startTime} - ${slot.endTime}`,
+          consultationType: consultationType,
+          status: 'waiting',
+          hospital: {
+              name: slot.hospital,
+              location: slot.hospitalLocation
+          }
+      });
+      console.log('Booking data to save:', booking);
+      await booking.save();
+
+      slot.status = 'booked';
+      await doctor.save();
+
+      res.status(200).json({ message: 'Booking successful' });
   } catch (error) {
-    console.error('Booking error:', error);
-    res.status(500).json({ error: 'Server Error' });
+      console.error(error.message);
+      res.status(500).json({ error: 'Server error' });
   }
 });
 
 
-
-
-
 router.get('/bookings', isLoggedIn, async (req, res) => {
+  
   try {
     const bookings = await Booking.find({ patient: req.session.user._id }).populate('doctor');
     res.render('patientBookings', { bookings });

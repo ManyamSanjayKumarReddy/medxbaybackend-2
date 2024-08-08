@@ -8,7 +8,7 @@ const bookingSchema = new mongoose.Schema({
     consultationType: {
         type: String,
         enum: ['In-person', 'Video call'],
-        required: true
+        required: true 
     },
     status: {
         type: String,
