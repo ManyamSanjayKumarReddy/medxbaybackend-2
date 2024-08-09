@@ -12,6 +12,7 @@ const Blog = require('../models/Blog');
 const Chat = require('../models/Chat');
 const Prescription = require('../models/Prescription');
 const Notification = require('../models/Notification');
+const Insurance = require('../models/Insurance');
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -51,14 +52,15 @@ router.get('/profile', isLoggedIn, async (req, res) => {
     const patientEmail = req.session.user.email;
     const patient = await Patient.findOne({ email: patientEmail }).lean();
     if (!patient) {
-      return res.status(404).send('Patient not found');
+      return res.status(404).json({ message: 'Patient not found' });
     }
-    res.render('patientProfile', { patient });
+    res.status(200).json({ patient });
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server Error');
+    res.status(500).json({ message: 'Server Error' });
   }
 });
+
 
 router.get('/edit', isLoggedIn, async (req, res) => {
   try {
@@ -110,7 +112,6 @@ router.post('/profile/update', upload.single('profilePicture'), isLoggedIn, asyn
     res.status(500).send('Server Error');
   }
 });
-
 router.get('/doctors', async (req, res) => {
   try {
     const sortOption = req.query.sort;
@@ -133,7 +134,7 @@ router.get('/doctors', async (req, res) => {
     const doctors = await Doctor.find({ verified: 'Verified' })
       .populate({
         path: 'hospitals',
-        select: 'name city -_id'
+        select: 'name city -_id' 
       })
       .sort(sortCriteria);
 
@@ -143,30 +144,19 @@ router.get('/doctors', async (req, res) => {
     const specialities = await Doctor.distinct('speciality');
     const languages = await Doctor.distinct('languages');
     const genders = await Doctor.distinct('gender');
-    const hospital = await Doctor.distinct('hospital');
 
-    // res.render('patientDoctors', {
-    //   doctors,
-    //   countries,
-    //   states,
-    //   cities,
-    //   specialities,
-    //   languages,
-    //   genders
-    // });
-    res.json({
+    res.render('patientDoctors', {
       doctors,
       countries,
       states,
       cities,
       specialities,
       languages,
-      genders,
-      hospital
+      genders
     });
   } catch (err) {
     console.error(err.message);
-    res.status(500).json({ error: 'Server Error' });
+    res.status(500).send('Server Error');
   }
 });
 router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
@@ -194,9 +184,7 @@ router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
       }
   } catch (error) {
       console.error(error.message);
-      if (req.accepts('html')) {
-          res.status(500).send('Server Error');
-      } else if (req.accepts('json')) {
+ if (req.accepts('json')) {
           res.status(500).json({ error: 'Server Error' });
       } else {
           res.status(406).send('Not Acceptable');
