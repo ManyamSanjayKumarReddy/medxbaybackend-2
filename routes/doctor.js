@@ -1073,7 +1073,7 @@ router.post('/chats/:chatId/send-message', isLoggedIn, async (req, res) => {
         let chat = await Chat.findOneAndUpdate(
             { _id: chatId, doctorId: doctor._id },
             { $push: { messages: { senderId: doctor._id, text: message, timestamp: new Date(), read: false } } },
-            { upsert: true, new: true }
+            { new: true }
         );
 
         const patient = await Patient.findById(chat.patientId);
@@ -1081,8 +1081,9 @@ router.post('/chats/:chatId/send-message', isLoggedIn, async (req, res) => {
         if (patient) {
             await Notification.create({
                 userId: patient._id,
-                message: `New message from Dr. ${doctor.name}`,
+                message: `New message from Dr. ${doctor.name}: ${message}`, 
                 type: 'chat',
+                chatId: chat._id, 
                 read: false,
                 createdAt: new Date()
             });
@@ -1096,34 +1097,48 @@ router.post('/chats/:chatId/send-message', isLoggedIn, async (req, res) => {
     }
 });
 
-  
-
 router.get('/chat/:id', isLoggedIn, checkSubscription, async (req, res) => {
     try {
         const chatId = req.params.id;
+
+        console.log('Request Details:', {
+            method: req.method,
+            url: req.url,
+            params: req.params,
+            query: req.query,
+            user: req.user
+        });
+
         const chat = await Chat.findById(chatId).populate('patientId').lean();
 
+        // console.log('Fetched Chat Object:', chat);
+
         if (!chat) {
-            return res.status(404).send('Chat not found');
+            console.log('Chat not found');
+            return res.status(404).json({ error: 'Chat not found' }); // Return JSON error response
         }
 
-        const updatedChat = await Chat.findById(chatId);
+        chat.messages.forEach(message => {
+            if (!message.text) {
+                console.error(`Message missing text found: ${message._id}`);
+            }
 
-        if (updatedChat) {
-            updatedChat.messages.forEach(message => {
-                if (message.senderId.toString() !== req.user._id.toString() && !message.read) {
-                    message.read = true;
-                }
-            });
+            if (message.senderId.toString() !== req.user._id.toString() && !message.read) {
+                message.read = true;
+            }
+        });
 
-            await updatedChat.save();
-        }
+        // Update the chat in the database with the read messages
+        await Chat.findByIdAndUpdate(chatId, { $set: { messages: chat.messages } });
 
-        res.render('doctorChat', { chat: updatedChat.toObject() });
+        console.log('Updated Chat Data:', chat);
+
+        // Send JSON response with chat data
+        res.json({ chat });
 
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error('Error Message:', err.message);
+        res.status(500).json({ error: 'Server Error' }); // Return JSON error response
     }
 });
 
@@ -1232,36 +1247,126 @@ router.get('/blogs', async (req, res) => {
     }
   });
 
-router.get('/notifications', isLoggedIn, async (req, res) => {
-try {
-    const notifications = await Notification.find({ userId: req.user._id }).lean();
-    res.render('doctorNotifications', { notifications });
-} catch (error) {
-    console.error(error);
-    res.status(500).send('Server Error');
-}
-});
-
-router.post('/notifications/:id/mark-read', isLoggedIn, async (req, res) => {
+  router.get('/notifications', isLoggedIn, async (req, res) => {
     try {
-        await Notification.findByIdAndUpdate(req.params.id, { read: true });
-        res.redirect('/doctor/notifications');
+      const notifications = await Notification.find({ userId: req.user._id }).lean();
+  
+      const chatNotifications = notifications.filter(notification => notification.type === 'chat');
+      const otherNotifications = notifications.filter(notification => notification.type !== 'chat');
+  
+      const chatDetailsPromises = chatNotifications.map(async (notification) => {
+        try {
+          if (!notification.chatId) {
+            console.warn(`No chatId for notification ${notification._id}`);
+            return {
+              ...notification,
+              senderName: 'Unknown',
+              senderProfilePic: null,
+              message: 'No message available',
+              timeAgo: timeSince(notification.createdAt) 
+            };
+          }
+  
+          const chat = await Chat.findById(notification.chatId)
+                                .populate('doctorId patientId')
+                                .lean();
+  
+          if (!chat) {
+            console.warn(`Chat not found for notification ${notification._id}`);
+            return {
+              ...notification,
+              senderName: 'Unknown',
+              senderProfilePic: null,
+              message: 'No message available',
+              timeAgo: timeSince(notification.createdAt) 
+            };
+          }
+  
+          const sender = chat.doctorId._id.toString() === req.user._id.toString() ? chat.patientId : chat.doctorId;
+  
+          return {
+            ...notification,
+            senderName: sender.name || 'Unknown',
+            senderProfilePic: sender.profilePicture ? `data:${sender.profilePicture.contentType};base64,${sender.profilePicture.data.toString('base64')}` : null,
+            message: notification.message,
+            timeAgo: timeSince(notification.createdAt) 
+          };
+        } catch (err) {
+          console.error(`Error fetching chat details for notification ${notification._id}:`, err);
+          return {
+            ...notification,
+            senderName: 'Error',
+            senderProfilePic: null,
+            message: 'Error fetching message',
+            timeAgo: timeSince(notification.createdAt) 
+          };
+        }
+      });
+  
+      const chatNotificationsWithDetails = await Promise.all(chatDetailsPromises);
+  
+      const allNotifications = [...chatNotificationsWithDetails, ...otherNotifications].map(notification => ({
+        ...notification,
+        timeAgo: timeSince(notification.createdAt)
+      }));
+  
+      // Send JSON response instead of rendering an HTML page
+      
+      res.json({ notifications: allNotifications });
     } catch (error) {
-        console.error(error);
-        res.status(500).send('Server Error');
+      console.error('Error fetching notifications:', error);
+      res.status(500).json({ error: 'Server Error' });
     }
-});
-
-router.post('/notifications/:id/delete', isLoggedIn, async (req, res) => {
+  });
+  
+  
+  function timeSince(date) {
+    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+    let interval = Math.floor(seconds / 31536000);
+  
+    if (interval > 1) {
+      return interval + " years ago";
+    }
+    interval = Math.floor(seconds / 2592000);
+    if (interval > 1) {
+      return interval + " months ago";
+    }
+    interval = Math.floor(seconds / 86400);
+    if (interval > 1) {
+      return interval + " days ago";
+    }
+    interval = Math.floor(seconds / 3600);
+    if (interval > 1) {
+      return interval + " hours ago";
+    }
+    interval = Math.floor(seconds / 60);
+    if (interval > 1) {
+      return interval + " minutes ago";
+    }
+    return Math.floor(seconds) + " seconds ago";
+  }
+  
+  router.post('/notifications/:id/mark-read', isLoggedIn, async (req, res) => {
     try {
-        await Notification.findByIdAndDelete(req.params.id);
-        res.redirect('/doctor/notifications');
+      await Notification.findByIdAndUpdate(req.params.id, { read: true });
+      res.json({ message: 'Notification marked as read' });
     } catch (error) {
-        console.error(error);
-        res.status(500).send('Server Error');
+      console.error(error);
+      res.status(500).json({ error: 'Server Error' });
     }
-});
-
-
-
-module.exports = router;
+  });
+  
+    
+    
+  router.post('/notifications/:id/delete', isLoggedIn, async (req, res) => {
+    try {
+      await Notification.findByIdAndDelete(req.params.id);
+      res.json({ message: 'Notification deleted' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Server Error' });
+    }
+  });
+  
+  
+  module.exports = router;

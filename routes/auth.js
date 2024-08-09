@@ -258,7 +258,6 @@ router.get('/google', (req, res) => {
 });
 
 
-
 router.get('/google/callback', async (req, res) => {
   const { code } = req.query;
 
@@ -277,22 +276,18 @@ router.get('/google/callback', async (req, res) => {
     let existingUser = await Patient.findOne({ email })
                        || await Doctor.findOne({ email })
                        || await Admin.findOne({ email });
-
+console.log(existingUser);
     if (existingUser) {
       req.session.user = existingUser;
-      req.flash('success_msg', 'Logged in successfully');
-      if (existingUser.role === 'patient') {
-        return res.redirect('/patient/patient-index'); 
-      } else if (existingUser.role === 'doctor') {
-        return res.redirect('/doctor/doctor-index'); 
-      } else if (existingUser.role === 'admin') {
-        return res.redirect('/admin/admin-home'); 
-      } else {
-        req.flash('error_msg', 'Invalid role');
-        return res.redirect('/auth/login');
-      }
+      res.json({
+        success: true,
+        user: existingUser,
+        message: 'Logged in successfully',
+        role: existingUser.role
+      });
+
     } else {
-      const { role } = JSON.parse(req.query.state); 
+      const { role } = JSON.parse(req.query.state);
 
       let newUser;
       if (role === 'patient') {
@@ -308,8 +303,7 @@ router.get('/google/callback', async (req, res) => {
           role: 'doctor', 
         });
       } else {
-        req.flash('error_msg', 'Invalid role');
-        return res.redirect('/auth/login');
+        return res.status(400).json({ success: false, message: 'Invalid role' });
       }
 
       const salt = await bcrypt.genSalt(10);
@@ -318,21 +312,16 @@ router.get('/google/callback', async (req, res) => {
       await newUser.save();
 
       req.session.user = newUser;
-      req.flash('success_msg', 'Logged in successfully');
-      
-      if (role === 'patient') {
-        return res.redirect('/patient/profile');
-      } else if (role === 'doctor') {
-        return res.redirect('/doctor/profile');
-      } else {
-        req.flash('error_msg', 'Invalid role');
-        return res.redirect('/auth/login');
-      }
+      res.json({
+        success: true,
+        user: newUser,
+        message: 'Logged in successfully',
+        role: newUser.role
+      });
     }
   } catch (err) {
     console.error('Error in Google OAuth callback:', err);
-    req.flash('error_msg', 'Authentication failed. Please try again.');
-    return res.redirect('/auth/login');
+    res.status(500).json({ success: false, message: 'Authentication failed. Please try again.' });
   }
 });
 

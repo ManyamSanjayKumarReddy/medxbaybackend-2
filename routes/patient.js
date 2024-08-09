@@ -773,36 +773,128 @@ router.get('/prescriptions/:id/download', isLoggedIn, async (req, res) => {
     res.status(500).send('Server Error');
   }
 });
-
 router.get('/notifications', isLoggedIn, async (req, res) => {
   try {
-      const notifications = await Notification.find({ userId: req.user._id }).lean();
-      res.render('patientNotifications', { notifications });
+    const notifications = await Notification.find({ userId: req.user._id }).lean();
+
+    const chatNotifications = notifications.filter(notification => notification.type === 'chat');
+    const otherNotifications = notifications.filter(notification => notification.type !== 'chat');
+
+    const chatDetailsPromises = chatNotifications.map(async (notification) => {
+      try {
+        if (!notification.chatId) {
+          console.warn(`No chatId for notification ${notification._id}`);
+          return {
+            ...notification,
+            senderName: 'Unknown',
+            senderProfilePic: null,
+            message: 'No message available',
+            timeAgo: timeSince(notification.createdAt) 
+          };
+        }
+
+        const chat = await Chat.findById(notification.chatId)
+                              .populate('doctorId patientId')
+                              .lean();
+
+        if (!chat) {
+          console.warn(`Chat not found for notification ${notification._id}`);
+          return {
+            ...notification,
+            senderName: 'Unknown',
+            senderProfilePic: null,
+            message: 'No message available',
+            timeAgo: timeSince(notification.createdAt) 
+          };
+        }
+
+        const sender = chat.doctorId._id.toString() === req.user._id.toString() ? chat.patientId : chat.doctorId;
+
+        return {
+          ...notification,
+          senderName: sender.name || 'Unknown',
+          senderProfilePic: sender.profilePicture ? `data:${sender.profilePicture.contentType};base64,${sender.profilePicture.data.toString('base64')}` : null,
+          message: notification.message,
+          timeAgo: timeSince(notification.createdAt) 
+        };
+      } catch (err) {
+        console.error(`Error fetching chat details for notification ${notification._id}:`, err);
+        return {
+          ...notification,
+          senderName: 'Error',
+          senderProfilePic: null,
+          message: 'Error fetching message',
+          timeAgo: timeSince(notification.createdAt) 
+        };
+      }
+    });
+
+    const chatNotificationsWithDetails = await Promise.all(chatDetailsPromises);
+
+    const allNotifications = [...chatNotificationsWithDetails, ...otherNotifications].map(notification => ({
+      ...notification,
+      timeAgo: timeSince(notification.createdAt)
+    }));
+
+    // Send JSON response instead of rendering an HTML page
+    
+    res.json({ notifications: allNotifications });
   } catch (error) {
-      console.error(error);
-      res.status(500).send('Server Error');
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ error: 'Server Error' });
   }
-  });
-  
-router.post('/notifications/:id/mark-read', isLoggedIn, async (req, res) => {
-    try {
-        await Notification.findByIdAndUpdate(req.params.id, { read: true });
-        res.redirect('/patient/notifications');
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Server Error');
-    }
 });
+
+
+function timeSince(date) {
+  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+  let interval = Math.floor(seconds / 31536000);
+
+  if (interval > 1) {
+    return interval + " years ago";
+  }
+  interval = Math.floor(seconds / 2592000);
+  if (interval > 1) {
+    return interval + " months ago";
+  }
+  interval = Math.floor(seconds / 86400);
+  if (interval > 1) {
+    return interval + " days ago";
+  }
+  interval = Math.floor(seconds / 3600);
+  if (interval > 1) {
+    return interval + " hours ago";
+  }
+  interval = Math.floor(seconds / 60);
+  if (interval > 1) {
+    return interval + " minutes ago";
+  }
+  return Math.floor(seconds) + " seconds ago";
+}
+
+router.post('/notifications/:id/mark-read', isLoggedIn, async (req, res) => {
+  try {
+    await Notification.findByIdAndUpdate(req.params.id, { read: true });
+    res.json({ message: 'Notification marked as read' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server Error' });
+  }
+});
+
   
   
 router.post('/notifications/:id/delete', isLoggedIn, async (req, res) => {
-    try {
-        await Notification.findByIdAndDelete(req.params.id);
-        res.redirect('/patient/notifications');
-    } catch (error) {
-        console.error(error);
-        res.status(500).send('Server Error');
-    }
+  try {
+    await Notification.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Notification deleted' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server Error' });
+  }
 });
+
+
+
 
 module.exports = router;
