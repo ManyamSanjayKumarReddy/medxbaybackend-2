@@ -353,7 +353,7 @@ router.get('/exit', (req, res) => {
   });
 });
 
-module.exports = router;
+
 
 
 router.get('/forgot-password', (req, res) => {
