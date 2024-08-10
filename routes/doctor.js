@@ -1037,27 +1037,28 @@ router.get('/dashboard', isLoggedIn, checkSubscription, async (req, res) => {
     try {
         const doctor = await Doctor.findOne({ email: req.session.user.email }).lean();
         if (!doctor) {
-            return res.status(404).send('Doctor not found');
+            return res.status(404).json({ error: 'Doctor not found' }); // Return JSON error response
         }
 
         const chats = await Chat.find({ doctorId: doctor._id })
-            .populate('patientId', 'name')
+            .populate('patientId', 'name profilePicture') // Assuming patient has a profilePicture field
             .sort({ updatedAt: -1 })
             .lean(); 
 
+        // Calculate unread message count for each chat
         chats.forEach(chat => {
             chat.unreadCount = chat.messages.filter(message => 
                 !message.read && message.senderId.toString() !== doctor._id.toString()
             ).length;
         });
 
-        res.render('doctorDashboard', { doctor, chats });
+        // Send JSON response with doctor and chats data
+        res.json({ doctor, chats });
     } catch (err) {
         console.error(err.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ error: 'Server Error' }); // Return JSON error response
     }
 });
-
 
 
 router.post('/chats/:chatId/send-message', isLoggedIn, async (req, res) => {
@@ -1097,6 +1098,7 @@ router.post('/chats/:chatId/send-message', isLoggedIn, async (req, res) => {
     }
 });
 
+
 router.get('/chat/:id', isLoggedIn, checkSubscription, async (req, res) => {
     try {
         const chatId = req.params.id;
@@ -1109,7 +1111,10 @@ router.get('/chat/:id', isLoggedIn, checkSubscription, async (req, res) => {
             user: req.user
         });
 
-        const chat = await Chat.findById(chatId).populate('patientId').lean();
+        const chat = await Chat.findById(chatId)
+        .populate('patientId', 'name email profilePicture') 
+        .lean();
+
 
         // console.log('Fetched Chat Object:', chat);
 
@@ -1134,7 +1139,11 @@ router.get('/chat/:id', isLoggedIn, checkSubscription, async (req, res) => {
         console.log('Updated Chat Data:', chat);
 
         // Send JSON response with chat data
-        res.json({ chat });
+        res.json({ 
+            chat, 
+            patientProfilePicture: chat.patientId.profilePicture 
+        });
+
 
     } catch (err) {
         console.error('Error Message:', err.message);

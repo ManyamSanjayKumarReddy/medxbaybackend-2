@@ -159,7 +159,7 @@ router.get('/doctors', async (req, res) => {
     res.status(500).send('Server Error');
   }
 });
-router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
+router.get('/doctors/:id/slots', async (req, res) => {
   try {
       const doctorId = req.params.id;
       const doctor = await Doctor.findById(doctorId)
@@ -175,22 +175,22 @@ router.get('/doctors/:id/slots', isLoggedIn, async (req, res) => {
       const insurances = await Insurance.find({ '_id': { $in: doctor.insurances } }).select('name logo');
       const blogs = await Blog.find({ authorId: doctorId, verificationStatus: 'Verified' });
 
-      if (req.accepts('html')) {
-          res.render('doctorProfileView', { doctor, insurances, blogs });
-      } else if (req.accepts('json')) {
+   
+      if (req.accepts('json')) {
           res.json({ doctor, insurances, blogs });
       } else {
           res.status(406).send('Not Acceptable');
       }
   } catch (error) {
       console.error(error.message);
- if (req.accepts('json')) {
+  if (req.accepts('json')) {
           res.status(500).json({ error: 'Server Error' });
       } else {
           res.status(406).send('Not Acceptable');
       }
   }
 });
+
 
 router.post('/book', isLoggedIn, async (req, res) => {
   try {
@@ -516,9 +516,9 @@ router.get('/dashboard', isLoggedIn, async (req, res) => {
     }
 
     const chats = await Chat.find({ patientId: patient._id })
-      .populate('doctorId', 'name')
-      .sort({ updatedAt: -1 })
-      .lean();
+            .populate('doctorId', 'name profilePicture') // Assuming patient has a profilePicture field
+            .sort({ updatedAt: -1 })
+            .lean(); 
 
     chats.forEach(chat => {
       chat.unreadCount = chat.messages.filter(message => 
@@ -535,7 +535,9 @@ router.get('/dashboard', isLoggedIn, async (req, res) => {
 router.get('/chat/:id', isLoggedIn, async (req, res) => {
   try {
     const chatId = req.params.id;
-    const chat = await Chat.findById(chatId).populate('doctorId').lean();
+    const chat = await Chat.findById(chatId)
+        .populate('doctorId', 'name email profilePicture') 
+        .lean();
 
     if (!chat) {
       return res.status(404).send('Chat not found');
@@ -549,7 +551,12 @@ router.get('/chat/:id', isLoggedIn, async (req, res) => {
 
     await Chat.updateOne({ _id: chatId }, { $set: { messages: chat.messages } });
     
-    res.json({ chat });
+    res.json({ 
+      chat, 
+      doctorProfilePicture: chat.doctorId.profilePicture 
+    });
+
+
   } catch (err) {
     console.error(err.message);
     return res.status(500).json({ error: 'Server Error' });
