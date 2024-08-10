@@ -112,6 +112,7 @@ router.post('/profile/update', upload.single('profilePicture'), isLoggedIn, asyn
     res.status(500).send('Server Error');
   }
 });
+
 router.get('/doctors', async (req, res) => {
   try {
     const sortOption = req.query.sort;
@@ -134,7 +135,7 @@ router.get('/doctors', async (req, res) => {
     const doctors = await Doctor.find({ verified: 'Verified' })
       .populate({
         path: 'hospitals',
-        select: 'name city -_id' 
+        select: 'name city -_id'
       })
       .sort(sortCriteria);
 
@@ -144,19 +145,30 @@ router.get('/doctors', async (req, res) => {
     const specialities = await Doctor.distinct('speciality');
     const languages = await Doctor.distinct('languages');
     const genders = await Doctor.distinct('gender');
+    const hospital = await Doctor.distinct('hospital');
 
-    res.render('patientDoctors', {
+    // res.render('patientDoctors', {
+    //   doctors,
+    //   countries,
+    //   states,
+    //   cities,
+    //   specialities,
+    //   languages,
+    //   genders
+    // });
+    res.json({
       doctors,
       countries,
       states,
       cities,
       specialities,
       languages,
-      genders
+      genders,
+      hospital
     });
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server Error');
+    res.status(500).json({ error: 'Server Error' });
   }
 });
 router.get('/doctors/:id/slots', async (req, res) => {

@@ -14,6 +14,7 @@ const Chat = require('../models/Chat');
 const Patient = require('../models/Patient');
 const Prescription = require('../models/Prescription');
 const Notification = require('../models/Notification');
+const Insurance = require('../models/Insurance');
 
 
 require('dotenv').config();
@@ -119,18 +120,21 @@ router.get('/profile', isLoggedIn, async (req, res) => {
   
   router.get('/profile/update', isLoggedIn, async (req, res) => {
     try {
-      const doctorEmail = req.session.user.email;
-      const doctor = await Doctor.findOne({ email: doctorEmail });
-      if (!doctor) {
-        return res.status(404).json({ error: 'Doctor not found' });
-      }
-      res.json(doctor); // Ensure this line sends JSON data
-    } catch (error) {
-      console.error('Error fetching doctor details:', error);
-      res.status(500).json({ error: 'Internal server error' });
+        const doctorEmail = req.session.user.email;
+        const doctor = await Doctor.findOne({ email: doctorEmail }).lean();
+
+        if (!doctor) {
+            return res.status(404).send('Doctor not found');
+        }
+
+        const insurances = await Insurance.find({ '_id': { $in: doctor.insurances } }).select('name logo');
+        const blogs = await Blog.find({ authorId: doctor._id, verificationStatus: 'Verified' });
+        res.json({ doctor, insurances ,blogs });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
     }
-  });
-  
+});
 
   router.post('/profile/update', upload.single('profilePicture'), async (req, res) => {
     try {

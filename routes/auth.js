@@ -257,9 +257,9 @@ router.get('/google', (req, res) => {
   res.redirect(url);
 });
 
-
 router.get('/google/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
+  const redirectUri = 'http://localhost:3000'; 
 
   try {
     const { tokens } = await oauth2Client.getToken(code);
@@ -276,31 +276,28 @@ router.get('/google/callback', async (req, res) => {
     let existingUser = await Patient.findOne({ email })
                        || await Doctor.findOne({ email })
                        || await Admin.findOne({ email });
-console.log(existingUser);
+
+    let newUser;
     if (existingUser) {
       req.session.user = existingUser;
-      res.json({
-        success: true,
-        user: existingUser,
-        message: 'Logged in successfully',
-        role: existingUser.role
-      });
-
+      const userRole = existingUser.role;
+      res.redirect(userRole === 'doctor'
+        ? 'http://localhost:3000/Doctor/profile/Edit'
+        : 'http://localhost:3000/profile/userprofile');
     } else {
-      const { role } = JSON.parse(req.query.state);
+      const role = JSON.parse(state).role;
 
-      let newUser;
       if (role === 'patient') {
         newUser = new Patient({
           name,
           email,
-          role: 'patient', 
+          role: 'patient',
         });
       } else if (role === 'doctor') {
         newUser = new Doctor({
           name,
           email,
-          role: 'doctor', 
+          role: 'doctor',
         });
       } else {
         return res.status(400).json({ success: false, message: 'Invalid role' });
@@ -312,18 +309,17 @@ console.log(existingUser);
       await newUser.save();
 
       req.session.user = newUser;
-      res.json({
-        success: true,
-        user: newUser,
-        message: 'Logged in successfully',
-        role: newUser.role
-      });
+      res.redirect(role === 'doctor'
+        ? 'http://localhost:3000/Doctor/profile/Edit'
+        : 'http://localhost:3000/profile/userprofile');
     }
   } catch (err) {
     console.error('Error in Google OAuth callback:', err);
     res.status(500).json({ success: false, message: 'Authentication failed. Please try again.' });
   }
 });
+
+
 
 router.get('/logout', (req, res) => {
   req.flash('success_msg', 'Logged out successfully');
