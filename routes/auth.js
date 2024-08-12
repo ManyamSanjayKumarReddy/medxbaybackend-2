@@ -57,7 +57,7 @@ const sendVerificationEmail = async (email, token, role) => {
     }
   });
 
-  const verificationLink = `http://localhost:8000/auth/verify-email?token=${token}&role=${role}`;
+  const verificationLink = `https://medxbay-deploy-1-431103.uc.r.appspot.com/auth/verify-email?token=${token}&role=${role}`;
 
 
   const mailOptions = {
@@ -282,8 +282,8 @@ router.get('/google/callback', async (req, res) => {
       req.session.user = existingUser;
       const userRole = existingUser.role;
       res.redirect(userRole === 'doctor'
-        ? 'http://localhost:3000/Doctor/profile/Edit'
-        : 'http://localhost:3000/profile/userprofile');
+        ? 'https://medxbay-deploy-1-431103.uc.r.appspot.com/profile/Edit'
+        : 'https://medxbay-deploy-1-431103.uc.r.appspot.com/userprofile');
     } else {
       const role = JSON.parse(state).role;
 
@@ -310,8 +310,8 @@ router.get('/google/callback', async (req, res) => {
 
       req.session.user = newUser;
       res.redirect(role === 'doctor'
-        ? 'http://localhost:3000/Doctor/profile/Edit'
-        : 'http://localhost:3000/profile/userprofile');
+        ? 'https://medxbay-deploy-1-431103.uc.r.appspot.com/Doctor/profile/Edit'
+        : 'https://medxbay-deploy-1-431103.uc.r.appspot.com/profile/userprofile');
     }
   } catch (err) {
     console.error('Error in Google OAuth callback:', err);
@@ -376,7 +376,7 @@ router.post('/forgot-password', async (req, res) => {
 
     await user.save();
 
-    const resetUrl = `http://localhost:8000/auth/reset-password?token=${resetToken}`;
+    const resetUrl = `https://medxbay-deploy-1-431103.uc.r.appspot.com/auth/reset-password?token=${resetToken}`;
     await sendResetPasswordEmail(user.email, resetUrl);
 
     return res.json({ success: true, message: 'A password reset link has been sent to your email.' });
