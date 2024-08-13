@@ -282,8 +282,8 @@ router.get('/google/callback', async (req, res) => {
       req.session.user = existingUser;
       const userRole = existingUser.role;
       res.redirect(userRole === 'doctor'
-        ? 'https://medxbay-deploy-1-431103.uc.r.appspot.com/profile/Edit'
-        : 'https://medxbay-deploy-1-431103.uc.r.appspot.com/userprofile');
+        ? 'http://localhost:3000//profile/Edit'
+        : 'http://localhost:3000//userprofile');
     } else {
       const role = JSON.parse(state).role;
 
@@ -310,8 +310,8 @@ router.get('/google/callback', async (req, res) => {
 
       req.session.user = newUser;
       res.redirect(role === 'doctor'
-        ? 'https://medxbay-deploy-1-431103.uc.r.appspot.com/Doctor/profile/Edit'
-        : 'https://medxbay-deploy-1-431103.uc.r.appspot.com/profile/userprofile');
+        ? 'http://localhost:3000//Doctor/profile/Edit'
+        : 'http://localhost:3000//profile/userprofile');
     }
   } catch (err) {
     console.error('Error in Google OAuth callback:', err);
